@@ -1,20 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Route, Switch, useLocation, useParams } from 'wouter';
 import { Archive, ArrowUpRight, BookOpen, CircleHelp, Coins, Feather, Grid2X2, ImagePlus, Plus, Search, Stamp, X, Pencil, Trash2, Save, RotateCcw } from 'lucide-react';
-import { emptyCropIds, findings, marketSource } from './research';
+import { CATALOG_GEOMETRY, CATALOG_RESEARCH, MAX_CATALOG_BYTES, emptyCropIds, findings, marketSource, parseCatalog, serializeCatalog, type Crop, type StampRecord } from './research';
 import ValuationSummary from './ValuationSummary';
 
-type Crop = { x: number; y: number; width: number; height: number };
-type StampRecord = {
-  id: string; displayName: string; country: string; issueYear: string; denomination: string; denominationCurrency: string; series: string;
-  subject: string; condition: string; gumPerforation: string; usedOrMint: string; estimatedValue: string; estimateCurrency: string;
-  valuationSource: string; history: string; confidence: string; reviewStatus: string; sourceAlbumPage: number; crop: Crop;
-};
-const images = ['/source/album-page-1-rectified.jpg', '/source/album-page-2-rectified.jpg', '/source/album-page-3-rectified.jpg'];
+const images = [1, 2, 3].map(page => `${import.meta.env.BASE_URL}source/album-page-${page}-rectified.jpg`);
 const STORE = 'philatelic-archive-v3';
 const GEOMETRY_KEY = 'philatelic-archive-rectified-v2';
 const RESEARCH_KEY = 'philatelic-archive-research-v1';
-const RESEARCH_VERSION = 'v2';
+const RESEARCH_VERSION = CATALOG_RESEARCH;
 const PAGE_GEOMETRY = [
   { width: 3059 / 3.9375, height: 4059 / 3.9375, angle: 0.4755888093 },
   { width: 3072 / 3.9375, height: 4068 / 3.9375, angle: -0.6574178364 },
@@ -209,7 +203,7 @@ function getInitial(): StampRecord[] {
       const records = JSON.parse(value) as StampRecord[];
       const geometryVersion = localStorage.getItem(GEOMETRY_KEY)
         ?? (localStorage.getItem('philatelic-archive-rectified-v1') ? 'v1' : null);
-      if (geometryVersion !== 'v3') {
+      if (geometryVersion !== CATALOG_GEOMETRY) {
         const migrated = records.map((record) => ({
           ...record,
           crop: geometryVersion === 'v2'
@@ -221,7 +215,7 @@ function getInitial(): StampRecord[] {
         // Persist the data before its marker; React may initialize state twice.
         localStorage.setItem(`${STORE}-before-geometry-v3`, value);
         localStorage.setItem(STORE, JSON.stringify(migrated));
-        localStorage.setItem(GEOMETRY_KEY, 'v3');
+        localStorage.setItem(GEOMETRY_KEY, CATALOG_GEOMETRY);
         if (localStorage.getItem(RESEARCH_KEY) !== RESEARCH_VERSION) {
           const enriched = enrichExisting(migrated);
           localStorage.setItem(STORE, JSON.stringify(enriched));
@@ -239,7 +233,7 @@ function getInitial(): StampRecord[] {
       }
       return records;
     }
-    localStorage.setItem(GEOMETRY_KEY, 'v3');
+    localStorage.setItem(GEOMETRY_KEY, CATALOG_GEOMETRY);
     localStorage.setItem(RESEARCH_KEY, RESEARCH_VERSION);
   } catch { /* use the album inventory if storage is unavailable */ }
   return seedRecords;
@@ -263,9 +257,59 @@ function App() {
   const [countryFilter, setCountryFilter] = useState('Все страны');
   const [statusFilter, setStatusFilter] = useState('Все записи');
   const [editing, setEditing] = useState<StampRecord | null>(null);
-  useEffect(() => { localStorage.setItem(STORE, JSON.stringify(records)); }, [records]);
+  const [storageError, setStorageError] = useState(false);
+  const [transferMessage, setTransferMessage] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(records));
+      setStorageError(false);
+    } catch { setStorageError(true); }
+  }, [records]);
   const idFromPath = location.match(/^\/collection\/([^/]+)/)?.[1];
   const activeRecord = idFromPath && idFromPath !== 'new' ? records.find(r => r.id === idFromPath) : undefined;
+  const exportCatalog = () => {
+    try {
+      const url = URL.createObjectURL(new Blob([serializeCatalog(records)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `stamp-catalog-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTransferMessage('Файл каталога подготовлен. Сохраните его вне браузера и выберите «Импорт каталога» на другом устройстве.');
+    } catch (error) {
+      setTransferMessage(error instanceof Error ? `Не удалось экспортировать каталог: ${error.message}` : 'Не удалось экспортировать каталог.');
+    }
+  };
+  const importCatalog = async (file: File) => {
+    setImporting(true);
+    setTransferMessage('');
+    try {
+      if (file.size > MAX_CATALOG_BYTES) throw new Error('Файл слишком большой. Максимальный размер — 10 МБ.');
+      const imported = parseCatalog(await file.text());
+      if (!window.confirm(`Заменить весь каталог?\n\nСейчас записей: ${records.length}. В файле: ${imported.length}.${imported.length === 0 ? '\nФайл пустой: все текущие карточки будут удалены.' : ''}\n\nВсе текущие записи и ручные исправления будут заменены, а не объединены. Отменить замену нельзя. Если нужна копия текущего каталога, нажмите «Отмена» и сначала экспортируйте его.`)) {
+        setTransferMessage('Импорт отменён. Каталог не изменён.');
+        return;
+      }
+      // One atomic write: quota/security failures must leave the old catalog
+      // and the visible cards intact. Initial loading already sets current markers.
+      try { localStorage.setItem(STORE, JSON.stringify(imported)); }
+      catch { throw new Error('Не удалось сохранить каталог на устройстве. Проверьте свободное место и разрешение на хранение данных. Текущий каталог не изменён.'); }
+      setRecords(imported);
+      setEditing(null);
+      setSearch(''); setCountryFilter('Все страны'); setStatusFilter('Все записи');
+      setLocation('/collection');
+      setTransferMessage(`Импорт завершён. Записей: ${imported.length}. Каталог сохранён на этом устройстве.`);
+    } catch (error) {
+      setTransferMessage(error instanceof Error ? error.message : 'Не удалось прочитать файл. Каталог не изменён.');
+    } finally {
+      setImporting(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
   const countries = useMemo(() => [...new Set(records.map(r => r.country).filter(c => c && c !== 'Не определена'))], [records]);
   const valued = records.filter(r => r.estimatedValue.trim() !== '').length;
   const addRecord = () => {
@@ -285,7 +329,17 @@ function App() {
     <div className="side-bottom"><strong>Медленно — значит внимательно.</strong><br/>Факты из альбома отделены от того, что ещё предстоит установить.</div>
   </aside>;
   return <div className="app-shell"><div className="grain"/><div className="shell-grid">{nav}<main className="main">
-    <header className="topbar"><div className="crumb">ЛИЧНЫЙ ФИЛАТЕЛИСТИЧЕСКИЙ АРХИВ&nbsp; / &nbsp;ЛИСТЫ 01—03</div><div className="top-actions"><span><i className="sync-dot"/> <span className="status-text">Изменения сохранены на этом устройстве</span></span><BookOpen size={16}/></div></header>
+    <header className="topbar"><div className="crumb">ЛИЧНЫЙ ФИЛАТЕЛИСТИЧЕСКИЙ АРХИВ&nbsp; / &nbsp;ЛИСТЫ 01—03</div><div className="top-actions"><span><i className="sync-dot"/> <span className="status-text">{storageError ? 'Не удалось сохранить изменения' : 'Изменения сохранены на этом устройстве'}</span></span><BookOpen size={16}/></div></header>
+    <section aria-label="Перенос каталога" style={{padding:'16px clamp(18px,4vw,58px)',borderBottom:'1px solid #ddd7c9'}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <button className="button" onClick={exportCatalog} disabled={importing || !!editing || !!activeRecord} data-testid="button-export-catalog">Экспорт каталога</button>
+        <button className="button" onClick={() => fileInput.current?.click()} disabled={importing || !!editing || !!activeRecord} data-testid="button-import-catalog">{importing ? 'Проверка файла…' : 'Импорт каталога'}</button>
+        <span style={{fontSize:12,color:'#68756d'}}>JSON · все карточки, заметки и границы вырезки. Фото уже доступны в приложении.</span>
+      </div>
+      <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Файл каталога" data-testid="input-import-catalog" onChange={event => { const file = event.target.files?.[0]; if (file) void importCatalog(file); }}/>
+      {transferMessage && <p role="status" style={{fontSize:13,marginBottom:0}}>{transferMessage}</p>}
+      {storageError && <p role="alert">Изменения не сохранены в браузере. Экспортируйте каталог сейчас, чтобы не потерять их.</p>}
+    </section>
     <Switch>
       <Route path="/collection/:id"><CollectionPage records={records} search={search} setSearch={setSearch} countries={countries} countryFilter={countryFilter} setCountryFilter={setCountryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} onAdd={addRecord} onEdit={setEditing}/></Route>
       <Route path="/collection"><CollectionPage records={records} search={search} setSearch={setSearch} countries={countries} countryFilter={countryFilter} setCountryFilter={setCountryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} onAdd={addRecord} onEdit={setEditing}/></Route>

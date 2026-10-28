@@ -40,3 +40,25 @@ PORT=5173 BASE_PATH=/ pnpm --filter @workspace/philately-collection build
 Спорные атрибуции и ограничения сохранены в карточках и исследовании.
 
 Секреты, зависимости, сборки и служебная история Replit не включены.
+
+## Публикация в GitHub Pages
+
+В настройках репозитория откройте **Settings → Pages → Source → GitHub Actions**.
+Файл `.github/workflows/deploy-pages.yml` автоматически собирает и публикует
+сайт после каждого изменения ветки `main`; запуск вручную доступен в **Actions**.
+
+Сборка использует префикс `/<имя репозитория>/` для фотографий, значка и JS/CSS.
+На GitHub Pages навигация работает через `#/collection`, поэтому прямые ссылки
+на карточки и обновление страницы не приводят к ошибке 404. В Replit остаются
+обычные адреса `/collection`.
+
+Локальная проверка сборки для GitHub Pages:
+
+```bash
+PORT=5173 BASE_PATH=/stamp-collection/ VITE_GITHUB_PAGES=true pnpm --filter @workspace/philately-collection build
+```
+
+Ссылку на опубликованный сайт GitHub покажет в **Settings → Pages**
+после успешного выполнения workflow. При первой публикации это может занять
+несколько минут. Данные браузера на домене Replit не переносятся на GitHub Pages
+автоматически: используйте экспорт и импорт каталога.

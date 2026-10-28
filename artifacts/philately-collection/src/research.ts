@@ -1,3 +1,61 @@
+import { z } from 'zod';
+
+// Backups carry the coordinate space and research revision so restoring on a
+// different browser never reapplies migrations to the owner's edited cards.
+export const CATALOG_FORMAT = 'philatelic-archive';
+export const CATALOG_GEOMETRY = 'v3';
+export const CATALOG_RESEARCH = 'v2';
+export const MAX_CATALOG_BYTES = 10 * 1024 * 1024;
+const text = z.string();
+export const stampRecordSchema = z.object({
+  id: z.string().min(1).max(200).regex(/^[a-zA-Z0-9_-]+$/),
+  displayName: text, country: text, issueYear: text, denomination: text,
+  denominationCurrency: text, series: text, subject: text, condition: text,
+  gumPerforation: text, usedOrMint: text, estimatedValue: text, estimateCurrency: text,
+  valuationSource: text, history: text, confidence: text, reviewStatus: text,
+  sourceAlbumPage: z.number().int().min(1).max(3),
+  // Rectification can put an edge slightly outside the photo.
+  crop: z.object({
+    x: z.number().finite().min(-100).max(100),
+    y: z.number().finite().min(-100).max(100),
+    width: z.number().finite().positive().max(200),
+    height: z.number().finite().positive().max(200),
+  }).strict(),
+}).strict();
+export type StampRecord = z.infer<typeof stampRecordSchema>;
+export type Crop = StampRecord['crop'];
+export const catalogSchema = z.object({
+  format: z.literal(CATALOG_FORMAT),
+  version: z.literal(1),
+  exportedAt: z.string().datetime(),
+  geometryVersion: z.literal(CATALOG_GEOMETRY),
+  researchVersion: z.literal(CATALOG_RESEARCH),
+  records: z.array(stampRecordSchema).max(10000).refine(
+    records => new Set(records.map(record => record.id)).size === records.length,
+    'Идентификаторы карточек не должны повторяться',
+  ),
+}).strict();
+export function serializeCatalog(records: StampRecord[]): string {
+  const content = JSON.stringify(catalogSchema.parse({
+    format: CATALOG_FORMAT, version: 1, exportedAt: new Date().toISOString(),
+    geometryVersion: CATALOG_GEOMETRY, researchVersion: CATALOG_RESEARCH, records,
+  }), null, 2);
+  if (new Blob([content]).size > MAX_CATALOG_BYTES) {
+    throw new Error('Каталог превышает допустимый размер файла 10 МБ.');
+  }
+  return content;
+}
+export function parseCatalog(content: string): StampRecord[] {
+  let value: unknown;
+  try { value = JSON.parse(content.replace(/^\uFEFF/, '')); }
+  catch { throw new Error('Файл не является корректным JSON. Выберите файл экспорта каталога.'); }
+  const result = catalogSchema.safeParse(value);
+  if (!result.success) {
+    throw new Error('Файл не соответствует формату каталога: неподдерживаемая версия, неверные поля, координаты или повторяющиеся идентификаторы. Данные не изменены.');
+  }
+  return result.data.records;
+}
+
 // Research-based inventory. A dash means that the photograph or catalogue does
 // not support a more precise attribution; it is not a missing UI value.
 export type Finding = {
