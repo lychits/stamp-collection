@@ -1,0 +1,15 @@
+{
+  "cuba": {"title":"BirdTheme: Cuba", "url":"https://www.birdtheme.org/country/cuba.html", "evidence":"research/sources/verification-cuba.md"},
+  "ussr": {"title":"BirdTheme: USSR", "url":"https://www.birdtheme.org/country/russussr.html", "evidence":"research/sources/page3-01-birdtheme-ussr.md"},
+  "vietnam": {"title":"BirdTheme: Vietnam", "url":"https://www.birdtheme.org/country/vietnam.html", "evidence":"research/sources/verification-vietnam.md"},
+  "nicaragua": {"title":"BirdTheme: Nicaragua", "url":"https://www.birdtheme.org/country/nicaragu.html", "evidence":"research/sources/verification-nicaragua.md"},
+  "poland": {"title":"BirdTheme: Poland", "url":"https://www.birdtheme.org/country/poland.html", "evidence":"research/sources/verification-poland.md"},
+  "namibia": {"title":"BirdTheme: Namibia", "url":"https://www.birdtheme.org/country/namibia.html", "evidence":"research/sources/verification-namibia.md"},
+  "hungary": {"title":"BirdTheme: Hungary", "url":"https://www.birdtheme.org/country/hungary.html", "evidence":"research/sources/verification-hungary.md"},
+  "australia": {"title":"BirdTheme: Australia", "url":"https://www.birdtheme.org/country/australia.html", "evidence":"research/sources/verification-australia.md"},
+  "czechoslovakia": {"title":"BirdTheme: Czechoslovakia", "url":"https://www.birdtheme.org/country/czechosl.html", "evidence":"research/sources/verification-czech.md"},
+  "ornithology1982": {"title":"USSR 1982 Ornithological Congress stamps", "url":"https://home.nestor.minsk.by/fsunews/ussr/1982/su5181-6.html", "evidence":"research/sources/page3-02-1982-ornithology.md"},
+  "eagle": {"title":"Eagle Stamps worldwide fixed-price stock", "url":"https://www.eaglestamps.com/flist.htm", "evidence":"research/sources/pricing-01-eagle-worldwide-birds.md"},
+  "mowbray": {"title":"Mowbray Postal Auction 541 catalogue", "url":"https://www.mowbrays.co.nz/files/catalogues/cat_541.pdf", "evidence":"research/sources/pricing-02-mowbray-auction.md"},
+  "sellmystamps": {"title":"SellMyStamps realised results archive", "url":"https://sellmystamps.co.uk/auction-results", "evidence":"research/sources/pricing-03-sellmystamps-results.md"}
+}
